@@ -7,6 +7,7 @@ A Chrome extension that bypasses household network verification checks, allowing
 1. **Clone or download this repository**
 
 2. **Load the extension in Chrome**
+
    - Open Chrome and go to `chrome://extensions/`
    - Enable "Developer mode" (toggle in top-right corner)
    - Click "Load unpacked"
@@ -28,7 +29,7 @@ The extension intercepts household verification requests at multiple layers:
 
 ## Disclaimer
 
-This extension is provided for educational purposes. Use at your own risk and in compliance with Terms of Service and local laws. The author is not responsible for account suspension or other consequences of using this extension. The extension is not to be distributed.
+This project is provided for educational and research purposes only. Not affiliated with or endorsed by Netflix. Use at your own risk and ensure compliance with applicable laws and service agreements. The author assumes no liability for any consequences resulting from use of this software. This software is provided "AS IS" without warranty of any kind.
 
 ---
 
