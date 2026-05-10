@@ -1,385 +1,372 @@
 // Anyflix - Household Bypass
-// This script intercepts GraphQL requests that check household/network status
+// Intercepts GraphQL and XHR requests that enforce Netflix household/network checks,
+// returning fake "no interstitial needed" responses so playback is never interrupted.
 
 (function() {
   'use strict';
 
-  // Operations to intercept and modify
+  // GraphQL operation names that trigger household verification popups.
+  // Intercepting these prevents the interstitial from ever being shown.
   const BLOCKED_OPERATIONS = [
-    'CLCSInterstitialLolomo',               // Browse page household interstitial check
-    'CLCSInterstitialPlaybackAndPostPlayback',  // Playback household interstitial check
-    'CLCSSendFeedback'                      // Feedback about interstitial shown
+    'CLCSInterstitialLolomo',               // Household check on the browse page
+    'CLCSInterstitialPlaybackAndPostPlayback', // Household check during/after playback
+    'CLCSSendFeedback',                     // Telemetry sent after an interstitial is shown
   ];
 
-  // Flag to track if we've bypassed the check
-  let bypassApplied = false;
+  // CSS selector that matches household interstitial overlay elements in the DOM.
+  // Used in multiple places so it's defined once here.
+  const INTERSTITIAL_SELECTOR = '[data-uia*="interstitial"], [class*="interstitial"], [class*="borrower"]';
 
-  // Override Netflix's internal state if possible
-  const patchNetflixState = () => {
-    try {
-      // Try to find and patch Netflix's internal CLCS state
-      if (window.netflix?.falcorCache) {
-        console.log('Anyflix: Found Netflix falcor cache');
-      }
-      
-      // Look for the player API and patch household state
-      const playerApp = document.querySelector('[data-uia="player"]');
-      if (playerApp && !bypassApplied) {
-        console.log('Anyflix: Player detected, applying bypass');
-        bypassApplied = true;
-      }
-    } catch (e) {
-      // Ignore errors
-    }
+  // ---------------------------------------------------------------------------
+  // Fullscreen transition guard
+  // ---------------------------------------------------------------------------
+  // Netflix briefly pauses the video, adds/removes overlay elements, and
+  // restructures the DOM when entering or exiting fullscreen. Without this guard,
+  // our DOM observer and video-pause hook would react to those transient changes
+  // and remove legitimate Netflix UI elements or force a play() call at the wrong
+  // moment — causing the visible flicker.
+  let isFullscreenTransitioning = false;
+  let fullscreenTransitionTimer;
+
+  // Set the guard for 800 ms on every fullscreen state change.
+  // 800 ms covers Netflix's CSS transition duration with some headroom.
+  const onFullscreenChange = () => {
+    isFullscreenTransitioning = true;
+    clearTimeout(fullscreenTransitionTimer);
+    fullscreenTransitionTimer = setTimeout(() => {
+      isFullscreenTransitioning = false;
+    }, 800);
   };
 
-  // Store original fetch
+  // Listen for both the standard and WebKit-prefixed fullscreen events.
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // ---------------------------------------------------------------------------
+  // Fake response factory
+  // ---------------------------------------------------------------------------
+  // Returns the JSON body Netflix expects when there is no household interstitial.
+  // Centralised here so it's not duplicated across fetch and XHR interceptors.
+  const fakeResponse = (operationName) => {
+    let data;
+    if (operationName === 'CLCSInterstitialLolomo') {
+      // null tells the browse page renderer not to show any interstitial lolomo row
+      data = { clcsInterstitialLolomo: null };
+    } else if (operationName === 'CLCSInterstitialPlaybackAndPostPlayback') {
+      // null tells the player not to pause and show an interstitial
+      data = { clcsInterstitialPlaybackAndPostPlayback: null };
+    } else {
+      // CLCSSendFeedback — acknowledge the telemetry call with a success flag
+      data = { clcsSendFeedback: { success: true } };
+    }
+    return JSON.stringify({ data });
+  };
+
+  // Wraps fakeResponse() in a fetch Response object ready to return from the
+  // fetch interceptor.
+  const fakeJsonResponse = (operationName) => new Response(fakeResponse(operationName), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fetch interceptor
+  // ---------------------------------------------------------------------------
+  // Wraps window.fetch to intercept three categories of request:
+  //   1. /api/ftl/probe  — network-topology fingerprinting; return a fake timestamp
+  //   2. graphql         — household check operations; return a fake null response
+  //   3. *.netflix.com   — strip any interstitial/borrower/household keys from JSON
   const originalFetch = window.fetch;
 
-  // Override fetch to intercept Netflix requests
   window.fetch = async function(...args) {
     const [resource, config] = args;
     const url = typeof resource === 'string' ? resource : resource?.url;
-    
-    // Intercept the FTL probe request (network fingerprinting)
+
+    // FTL probe: Netflix uses this to detect whether two devices share a local
+    // network (a proxy/VPN would give different latency). Returning a plausible
+    // timestamp prevents the check from triggering a household warning.
     if (url && url.includes('/api/ftl/probe')) {
       console.log('Anyflix: Intercepted ftl/probe (fetch)');
-      // Return a fake timestamp response that the player expects
-      return new Response(JSON.stringify({
-        time: Date.now(),
-        serverTime: Date.now()
-      }), {
+      return new Response(JSON.stringify({ time: Date.now(), serverTime: Date.now() }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       });
     }
-    
-    // Check if this is a GraphQL request to Netflix
+
+    // GraphQL household check: resolve the operation name from either the
+    // custom request header (primary path) or the request body (fallback).
     if (url && url.includes('graphql')) {
       try {
-        // Check the operation name in headers
-        const operationName = config?.headers?.['x-netflix.context.operation-name'];
-        
+        const operationName =
+          config?.headers?.['x-netflix.context.operation-name'] ??
+          (() => {
+            const bodyStr = typeof config?.body === 'string' ? config.body : '';
+            // Body-based detection for clients that don't set the custom header
+            return BLOCKED_OPERATIONS.find(op => bodyStr.includes(`"operationName":"${op}"`));
+          })();
+
         if (operationName && BLOCKED_OPERATIONS.includes(operationName)) {
           console.log('Anyflix: Intercepted household check:', operationName);
-          
-          // Return a fake successful response that says "no interstitial needed"
-          if (operationName === 'CLCSInterstitialLolomo') {
-            return new Response(JSON.stringify({
-              data: {
-                clcsInterstitialLolomo: null
-              }
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-          
-          // For playback interstitial, return null (no interstitial needed)
-          if (operationName === 'CLCSInterstitialPlaybackAndPostPlayback') {
-            return new Response(JSON.stringify({
-              data: {
-                clcsInterstitialPlaybackAndPostPlayback: null
-              }
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-          
-          // For feedback, just return success
-          if (operationName === 'CLCSSendFeedback') {
-            return new Response(JSON.stringify({
-              data: {
-                clcsSendFeedback: { success: true }
-              }
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-        }
-
-        // Also check the body for operation names (fallback method)
-        if (config?.body) {
-          const bodyStr = typeof config.body === 'string' ? config.body : '';
-          for (const op of BLOCKED_OPERATIONS) {
-            if (bodyStr.includes(`"operationName":"${op}"`)) {
-              console.log('Anyflix: Intercepted household check (body):', op);
-              
-              if (op === 'CLCSInterstitialLolomo') {
-                return new Response(JSON.stringify({
-                  data: {
-                    clcsInterstitialLolomo: null
-                  }
-                }), {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' }
-                });
-              }
-              
-              if (op === 'CLCSInterstitialPlaybackAndPostPlayback') {
-                return new Response(JSON.stringify({
-                  data: {
-                    clcsInterstitialPlaybackAndPostPlayback: null
-                  }
-                }), {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' }
-                });
-              }
-              
-              if (op === 'CLCSSendFeedback') {
-                return new Response(JSON.stringify({
-                  data: {
-                    clcsSendFeedback: { success: true }
-                  }
-                }), {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' }
-                });
-              }
-            }
-          }
+          return fakeJsonResponse(operationName);
         }
       } catch (e) {
         console.error('Anyflix: Error intercepting request:', e);
       }
     }
 
-    // For ALL Netflix API requests, intercept the response and strip household data
+    // Response scrubbing: for any JSON response from Netflix domains, remove
+    // keys that relate to household/interstitial state. This is a safety net for
+    // operation names or endpoints not covered above.
     if (url && (url.includes('netflix.com') || url.includes('nflxvideo.net'))) {
       try {
         const response = await originalFetch.apply(this, args);
-        
-        // Clone the response so we can read it
-        const clone = response.clone();
         const contentType = response.headers.get('content-type') || '';
-        
-        // Only modify JSON responses
+
         if (contentType.includes('application/json')) {
           try {
-            const data = await clone.json();
-            
-            // Check if response contains household/interstitial data
+            const data = await response.clone().json();
             const dataStr = JSON.stringify(data);
-            if (dataStr.includes('interstitial') || dataStr.includes('borrower') || 
+
+            // Only pay the cost of re-serialisation when relevant keys are present
+            if (dataStr.includes('interstitial') || dataStr.includes('borrower') ||
                 dataStr.includes('household') || dataStr.includes('CLCS')) {
               console.log('Anyflix: Stripping household data from response');
-              
-              // Recursively remove interstitial-related properties
+              // Reviver function nulls out interstitial/borrower keys recursively
               const cleanData = JSON.parse(dataStr, (key, value) => {
                 if (key.toLowerCase().includes('interstitial')) return null;
                 if (key.toLowerCase().includes('borrower') && typeof value === 'object') return null;
                 return value;
               });
-              
               return new Response(JSON.stringify(cleanData), {
                 status: response.status,
                 statusText: response.statusText,
-                headers: response.headers
+                headers: response.headers,
               });
             }
-          } catch (jsonErr) {
-            // Not valid JSON or parsing failed, return original
+          } catch (_) {
+            // Response is not valid JSON — return the original unchanged
           }
         }
-        
+
         return response;
       } catch (fetchErr) {
-        // Fetch failed, let it pass through
+        // Network error (e.g. blocked by uBlock); re-throw so the caller handles it
         throw fetchErr;
       }
     }
 
-    // Pass through all other requests
+    // All other requests pass through unmodified
     return originalFetch.apply(this, args);
   };
 
-  // Also override XMLHttpRequest for completeness
+  // ---------------------------------------------------------------------------
+  // XHR interceptor
+  // ---------------------------------------------------------------------------
+  // Some Netflix code paths use XMLHttpRequest instead of fetch; this mirrors
+  // the same ftl/probe and GraphQL interception logic for those paths.
   const originalXHROpen = XMLHttpRequest.prototype.open;
   const originalXHRSend = XMLHttpRequest.prototype.send;
 
+  // Store the URL on the instance so send() can inspect it
   XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     this._anyflixUrl = url;
-    this._anyflixMethod = method;
     return originalXHROpen.apply(this, [method, url, ...rest]);
   };
 
   XMLHttpRequest.prototype.send = function(body) {
     const url = this._anyflixUrl || '';
-    
-    // Intercept the FTL probe request (network fingerprinting)
+
+    // FTL probe via XHR: simulate a complete, successful response synchronously
+    // via setTimeout to match the async behaviour the caller expects.
     if (url.includes('/api/ftl/probe')) {
       console.log('Anyflix: Intercepted ftl/probe (XHR)');
-      
-      const fakeResponse = JSON.stringify({
-        time: Date.now(),
-        serverTime: Date.now()
-      });
-      
-      // Need to properly simulate the XHR lifecycle
+      const responseText = JSON.stringify({ time: Date.now(), serverTime: Date.now() });
       const self = this;
       setTimeout(() => {
+        // Populate all properties the caller may read
         Object.defineProperty(self, 'readyState', { value: 4, writable: false });
         Object.defineProperty(self, 'status', { value: 200, writable: false });
         Object.defineProperty(self, 'statusText', { value: 'OK', writable: false });
-        Object.defineProperty(self, 'responseText', { value: fakeResponse, writable: false });
-        Object.defineProperty(self, 'response', { value: fakeResponse, writable: false });
+        Object.defineProperty(self, 'responseText', { value: responseText, writable: false });
+        Object.defineProperty(self, 'response', { value: responseText, writable: false });
         Object.defineProperty(self, 'responseURL', { value: url, writable: false });
-        
-        // Trigger the state change events
+        // Fire all the standard completion callbacks/events
         if (self.onreadystatechange) self.onreadystatechange();
         if (self.onload) self.onload();
-        
-        // Dispatch events for listeners
         self.dispatchEvent(new Event('readystatechange'));
         self.dispatchEvent(new Event('load'));
         self.dispatchEvent(new Event('loadend'));
       }, 5);
-      
-      return;
+      return; // Prevent the real request from being sent
     }
-    
-    // Intercept GraphQL household checks
+
+    // GraphQL household check via XHR: scan the request body for the operation name
     if (url.includes('graphql') && body) {
       const bodyStr = typeof body === 'string' ? body : '';
-      for (const op of BLOCKED_OPERATIONS) {
-        if (bodyStr.includes(`"operationName":"${op}"`)) {
-          console.log('Anyflix: Intercepted XHR household check:', op);
-          
-          // Create a fake response based on operation type
-          let fakeResponse;
-          if (op === 'CLCSInterstitialLolomo') {
-            fakeResponse = JSON.stringify({ data: { clcsInterstitialLolomo: null } });
-          } else if (op === 'CLCSInterstitialPlaybackAndPostPlayback') {
-            fakeResponse = JSON.stringify({ data: { clcsInterstitialPlaybackAndPostPlayback: null } });
-          } else {
-            fakeResponse = JSON.stringify({ data: { clcsSendFeedback: { success: true } } });
-          }
-          
-          // Simulate successful response
-          Object.defineProperty(this, 'readyState', { value: 4 });
-          Object.defineProperty(this, 'status', { value: 200 });
-          Object.defineProperty(this, 'responseText', { value: fakeResponse });
-          Object.defineProperty(this, 'response', { value: fakeResponse });
-          
-          setTimeout(() => {
-            this.onreadystatechange?.();
-            this.onload?.();
-          }, 10);
-          
-          return;
-        }
+      const matched = BLOCKED_OPERATIONS.find(op => bodyStr.includes(`"operationName":"${op}"`));
+      if (matched) {
+        console.log('Anyflix: Intercepted XHR household check:', matched);
+        const responseText = fakeResponse(matched);
+        // Set response properties before firing callbacks
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'responseText', { value: responseText });
+        Object.defineProperty(this, 'response', { value: responseText });
+        setTimeout(() => {
+          this.onreadystatechange?.();
+          this.onload?.();
+        }, 10);
+        return; // Prevent the real request from being sent
       }
     }
+
     return originalXHRSend.apply(this, [body]);
   };
 
-  // Remove any existing household interstitial overlays from the DOM
+  // ---------------------------------------------------------------------------
+  // DOM observer: remove interstitial overlay elements
+  // ---------------------------------------------------------------------------
+  // Watches for household interstitial nodes being inserted into the DOM and
+  // removes them immediately. This handles cases where the interstitial renders
+  // before our fetch/XHR intercepts can suppress the triggering request.
+  // Skipped during fullscreen transitions to avoid removing transient Netflix
+  // UI elements that share class names with interstitials.
   const observer = new MutationObserver((mutations) => {
+    if (isFullscreenTransitioning) return; // Don't touch DOM during fullscreen animations
+
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          // Look for the household interstitial modal
-          const interstitial = node.querySelector?.('[data-uia*="interstitial"], [class*="interstitial"], [class*="borrower"]');
-          if (interstitial) {
-            console.log('Anyflix: Removing household interstitial overlay');
-            interstitial.remove();
-          }
-          
-          // Also check if the node itself is the interstitial
-          if (node.dataset?.uia?.includes('interstitial') || 
-              node.className?.includes?.('interstitial') ||
-              node.className?.includes?.('borrower')) {
-            console.log('Anyflix: Removing household interstitial node');
-            node.remove();
-          }
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+        // Check descendants first (interstitial may be nested inside another element)
+        const interstitial = node.querySelector?.(INTERSTITIAL_SELECTOR);
+        if (interstitial) {
+          console.log('Anyflix: Removing household interstitial overlay');
+          interstitial.remove();
+        }
+
+        // Also check the node itself in case it is the interstitial root
+        if (node.dataset?.uia?.includes('interstitial') ||
+            node.className?.includes?.('interstitial') ||
+            node.className?.includes?.('borrower')) {
+          console.log('Anyflix: Removing household interstitial node');
+          node.remove();
         }
       }
     }
-    
-    // Check for and resume paused video if it was interrupted
-    patchNetflixState();
   });
 
-  // Periodically check for video pause state and try to resume
+  const startObserver = () => observer.observe(document.body, { childList: true, subtree: true });
+  if (document.body) {
+    startObserver();
+  } else {
+    document.addEventListener('DOMContentLoaded', startObserver);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Periodic household overlay / modal check
+  // ---------------------------------------------------------------------------
+  // Belt-and-suspenders sweep that runs every 500 ms to catch interstitials that
+  // slip past the mutation observer (e.g. added before observation started).
+  // Skipped during fullscreen transitions to prevent spurious video.play() calls
+  // that would cause a visible flicker during the animation.
   const checkAndResumeVideo = () => {
+    if (isFullscreenTransitioning) return;
     try {
       const video = document.querySelector('video');
+      // If the video is paused and there is an interstitial overlay, remove the
+      // overlay and resume — the pause was caused by the household check, not the user.
       if (video && video.paused && video.readyState >= 2) {
-        // Check if there's an interstitial overlay causing the pause
-        const overlay = document.querySelector('[data-uia*="interstitial"], [class*="interstitial"], [class*="borrower"]');
+        const overlay = document.querySelector(INTERSTITIAL_SELECTOR);
         if (overlay) {
           console.log('Anyflix: Found overlay while video paused, removing and resuming');
           overlay.remove();
           video.play().catch(() => {});
         }
       }
-      
-      // Also look for any modal or popup that might be blocking
+
+      // Scan for any modal/popup/overlay whose text content contains household
+      // keywords (Norwegian and English). Only text-matched elements are removed
+      // to avoid false positives against legitimate Netflix UI.
       const modals = document.querySelectorAll('[class*="modal"], [class*="popup"], [class*="overlay"]');
       modals.forEach(modal => {
         const text = modal.textContent || '';
-        if (text.includes('husholdning') || text.includes('household') || 
+        if (text.includes('husholdning') || text.includes('household') ||
             text.includes('WiFi') || text.includes('nettverk')) {
           console.log('Anyflix: Removing household modal');
           modal.remove();
         }
       });
-    } catch (e) {
-      // Ignore errors
+    } catch (_) {
+      // Silently ignore errors — Netflix may restructure the DOM at any time
     }
   };
 
-  // Run the check periodically
   setInterval(checkAndResumeVideo, 500);
 
-  // Patch the video element to prevent household-triggered pauses
-  const patchVideoElement = () => {
-    const video = document.querySelector('video');
-    if (video && !video._anyflixPatched) {
-      video._anyflixPatched = true;
-      
-      const originalPause = video.pause.bind(video);
-      let lastPlayTime = 0;
-      
-      video.pause = function() {
-        // Check if this pause is likely from household restriction
-        const timeSincePlay = Date.now() - lastPlayTime;
-        const hasOverlay = document.querySelector('[data-uia*="interstitial"], [class*="interstitial"], [class*="borrower"]');
-        
-        // If paused very quickly after play and there's an overlay, this is likely household restriction
-        if (timeSincePlay < 5000 && hasOverlay) {
-          console.log('Anyflix: Blocking household-triggered pause');
-          hasOverlay.remove();
-          return; // Don't pause
-        }
-        
-        return originalPause();
-      };
-      
-      // Track when play is called
-      const originalPlay = video.play.bind(video);
-      video.play = function() {
-        lastPlayTime = Date.now();
-        return originalPlay();
-      };
-      
-      console.log('Anyflix: Video element patched');
-    }
+  // ---------------------------------------------------------------------------
+  // Video element patch: block household-triggered pauses
+  // ---------------------------------------------------------------------------
+  // Overrides video.pause() to detect and suppress pauses that are caused by
+  // a household interstitial rather than by the user. If a pause is requested
+  // within 5 seconds of the last play() call AND an interstitial overlay is
+  // present, the pause is blocked and the overlay is removed instead.
+  //
+  // Uses a MutationObserver (rather than a polling interval) to detect when
+  // Netflix inserts a new <video> element, so patching happens immediately
+  // without burning CPU on a tight interval.
+  const patchVideoElement = (video) => {
+    if (video._anyflixPatched) return; // Don't double-patch the same element
+    video._anyflixPatched = true;
+
+    const originalPause = video.pause.bind(video);
+    const originalPlay = video.play.bind(video);
+    let lastPlayTime = 0; // Timestamp of the most recent play() call
+
+    video.pause = function() {
+      // Always allow pauses during fullscreen transitions; the player needs them
+      // for its own resize/layout logic and blocking them causes the flicker.
+      if (isFullscreenTransitioning) return originalPause();
+
+      const timeSincePlay = Date.now() - lastPlayTime;
+      const hasOverlay = document.querySelector(INTERSTITIAL_SELECTOR);
+
+      // Heuristic: a pause within 5 s of play() while an interstitial exists is
+      // almost certainly a household-triggered pause, not a user action.
+      if (timeSincePlay < 5000 && hasOverlay) {
+        console.log('Anyflix: Blocking household-triggered pause');
+        hasOverlay.remove();
+        return; // Suppress the pause
+      }
+
+      return originalPause();
+    };
+
+    // Track the last play time so the pause heuristic above has a reference point
+    video.play = function() {
+      lastPlayTime = Date.now();
+      return originalPlay();
+    };
+
+    console.log('Anyflix: Video element patched');
   };
 
-  // Check for video element periodically
-  setInterval(patchVideoElement, 100);
+  // Re-run patchVideoElement whenever new elements are added to the DOM;
+  // Netflix can swap out the <video> element (e.g. on track/quality change).
+  const videoObserver = new MutationObserver(() => {
+    document.querySelectorAll('video').forEach(patchVideoElement);
+  });
 
-  // Start observing once DOM is ready
+  const startVideoObserver = () => {
+    // Patch any <video> elements already in the DOM before the observer starts
+    document.querySelectorAll('video').forEach(patchVideoElement);
+    videoObserver.observe(document.body, { childList: true, subtree: true });
+  };
+
   if (document.body) {
-    observer.observe(document.body, { childList: true, subtree: true });
+    startVideoObserver();
   } else {
-    document.addEventListener('DOMContentLoaded', () => {
-      observer.observe(document.body, { childList: true, subtree: true });
-    });
+    document.addEventListener('DOMContentLoaded', startVideoObserver);
   }
 
   console.log('Anyflix: Household bypass injected');
