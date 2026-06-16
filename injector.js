@@ -17,6 +17,10 @@
   // Used in multiple places so it's defined once here.
   const INTERSTITIAL_SELECTOR = '[data-uia*="interstitial"], [class*="interstitial"], [class*="borrower"]';
 
+  // Streaming-session endpoint used by the Canaldigital host to monitor playback.
+  // Intercepting this path prevents the monitoring POST from reaching the server.
+  const STREAM_SESSION_PATH = '/v1/stream/session/';
+
   // ---------------------------------------------------------------------------
   // Fullscreen transition guard
   // ---------------------------------------------------------------------------
@@ -75,12 +79,20 @@
   // Wraps window.fetch to intercept three categories of request:
   //   1. /api/ftl/probe  — network-topology fingerprinting; return a fake timestamp
   //   2. graphql         — household check operations; return a fake null response
-  //   3. *.netflix.com   — strip any interstitial/borrower/household keys from JSON
+  //   3. *.netflix.com and api-canaldigital.com — strip any interstitial/borrower/household keys from JSON
   const originalFetch = window.fetch;
 
   window.fetch = async function(...args) {
     const [resource, config] = args;
     const url = typeof resource === 'string' ? resource : resource?.url;
+
+    if (url && url.includes('api-canaldigital.com') && url.includes(STREAM_SESSION_PATH) && url.includes('/streaming')) {
+      console.log('Anyflix: Intercepted stream session monitoring request (fetch)');
+      return new Response('', {
+        status: 204,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
 
     // FTL probe: Netflix uses this to detect whether two devices share a local
     // network (a proxy/VPN would give different latency). Returning a plausible
@@ -117,7 +129,7 @@
     // Response scrubbing: for any JSON response from Netflix domains, remove
     // keys that relate to household/interstitial state. This is a safety net for
     // operation names or endpoints not covered above.
-    if (url && (url.includes('netflix.com') || url.includes('nflxvideo.net'))) {
+    if (url && (url.includes('netflix.com') || url.includes('nflxvideo.net') || url.includes('api-canaldigital.com'))) {
       try {
         const response = await originalFetch.apply(this, args);
         const contentType = response.headers.get('content-type') || '';
@@ -175,6 +187,25 @@
 
   XMLHttpRequest.prototype.send = function(body) {
     const url = this._anyflixUrl || '';
+
+    if (url.includes('api-canaldigital.com') && url.includes(STREAM_SESSION_PATH) && url.includes('/streaming')) {
+      console.log('Anyflix: Intercepted stream session monitoring request (XHR)');
+      const self = this;
+      setTimeout(() => {
+        Object.defineProperty(self, 'readyState', { value: 4, writable: false });
+        Object.defineProperty(self, 'status', { value: 204, writable: false });
+        Object.defineProperty(self, 'statusText', { value: 'No Content', writable: false });
+        Object.defineProperty(self, 'responseText', { value: '', writable: false });
+        Object.defineProperty(self, 'response', { value: '', writable: false });
+        Object.defineProperty(self, 'responseURL', { value: url, writable: false });
+        if (self.onreadystatechange) self.onreadystatechange();
+        if (self.onload) self.onload();
+        self.dispatchEvent(new Event('readystatechange'));
+        self.dispatchEvent(new Event('load'));
+        self.dispatchEvent(new Event('loadend'));
+      }, 5);
+      return;
+    }
 
     // FTL probe via XHR: simulate a complete, successful response synchronously
     // via setTimeout to match the async behaviour the caller expects.

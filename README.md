@@ -1,6 +1,6 @@
 # Anyflix
 
-A Chrome extension that bypasses household network verification checks, allowing you to watch your favorite shows from networks outside your registered home.
+A Chrome extension that bypasses household network verification checks, allowing you to both watch your favorite shows from networks outside your registered home, and to watch more than one stream from the same account.
 
 ## Installation
 
@@ -22,10 +22,11 @@ A Chrome extension that bypasses household network verification checks, allowing
 The extension intercepts household verification requests at multiple layers:
 
 1. **GraphQL Interception**: Intercepts `CLCSInterstitialLolomo` (browse) and `CLCSInterstitialPlaybackAndPostPlayback` (playback) GraphQL operations and returns fake responses
-2. **Response Stripping**: Removes household/interstitial/borrower data from all JSON API responses
-3. **Video Control**: Patches video element methods to prevent household-triggered pauses
-4. **DOM Cleanup**: Periodically removes verification overlays that may appear
-5. **Network Requests**: Intercepts `/api/ftl/probe` network fingerprinting requests
+2. **Session Monitoring Protection**: Blocks the `https://w-sgprod-zulu.api-canaldigital.com/v1/stream/session/*/streaming` POST used to monitor playback sessions
+3. **Response Stripping**: Removes household/interstitial/borrower data from JSON API responses
+4. **Video Control**: Patches video element methods to prevent household-triggered pauses
+5. **DOM Cleanup**: Periodically removes verification overlays that may appear
+6. **Network Requests**: Intercepts `/api/ftl/probe` network fingerprinting requests
 
 ## Disclaimer
 
