@@ -1,6 +1,6 @@
 # Anyflix
 
-A Chrome extension that bypasses household network verification checks, allowing you to both watch your favorite shows from networks outside your registered home, and to watch more than one stream from the same account.
+A Chrome extension that bypasses household network verification checks, allowing you to both watch your favorite shows from networks outside your registered home, watch more than one stream from the same account, and read the news without accepting the "pay or OK"-popup.
 
 ## Installation
 

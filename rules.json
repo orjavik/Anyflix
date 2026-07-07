@@ -1,1 +1,22 @@
-[]
+[
+	{
+		"id": 1,
+		"priority": 1,
+		"action": {
+			"type": "block"
+		},
+		"condition": {
+			"urlFilter": "||cmp.vg.no/wrapper/v2/"
+		}
+	},
+	{
+		"id": 2,
+		"priority": 1,
+		"action": {
+			"type": "block"
+		},
+		"condition": {
+			"urlFilter": "||cmp.vg.no/unified/wrapperMessagingWithoutDetection.js"
+		}
+	}
+]
