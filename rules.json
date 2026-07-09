@@ -18,5 +18,15 @@
 		"condition": {
 			"urlFilter": "||cmp.vg.no/unified/wrapperMessagingWithoutDetection.js"
 		}
+	},
+	{
+		"id": 3,
+		"priority": 1,
+		"action": {
+			"type": "block"
+		},
+		"condition": {
+			"urlFilter": "||cmp.e24.no/unified/wrapperMessagingWithoutDetection.js"
+		}
 	}
 ]

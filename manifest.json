@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Anyflix",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Bypass streaming network checks",
   "icons": {
     "16": "icons/icon-16.png",
@@ -17,7 +17,8 @@
     "*://web.prod.cloud.netflix.com/*",
     "*://tv.allente.no/*",
     "*://w-sgprod-zulu.api-canaldigital.com/*",
-    "*://cmp.vg.no/*"
+    "*://cmp.vg.no/*",
+    "*://cmp.e24.no/*"
   ],
   "background": {
     "service_worker": "background.js"
