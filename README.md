@@ -1,6 +1,19 @@
 # Anyflix
 
-A Chrome extension that bypasses household network verification checks, allowing you to both watch your favorite shows from networks outside your registered home, watch more than one stream from the same account, and read the news without accepting the "pay or OK"-popup.
+A Chrome extension that filters a small, explicit set of network requests associated with streaming verification and consent-management flows.
+
+## Network-only design
+
+Anyflix does not remove, hide, inspect, or modify page elements. It does not patch video playback and it does not rewrite server responses.
+
+The extension uses two request-level mechanisms:
+
+- `rules.json` contains declarative Chrome rules for stable URL-based requests: Netflix FTL probes, Allente session-monitoring calls, and the VG/E24 consent scripts.
+- `request-blocker.js` runs only on Netflix and prevents the three known verification GraphQL operations from being dispatched. Those operations cannot be represented safely as declarative rules because they share a GraphQL URL with normal Netflix traffic and are identified by request metadata.
+
+All blocked requests fail locally; Anyflix never fabricates a successful response. A service may handle a failed request differently after an upstream change, so request filtering cannot guarantee a particular playback or consent-flow outcome.
+
+Rule IDs are grouped by purpose: `1001`–`1003` for consent scripts and `2001`–`2002` for URL-addressable service requests.
 
 ## Installation
 
@@ -15,6 +28,11 @@ A Chrome extension that bypasses household network verification checks, allowing
 
 3. **The extension is now active!**
    - You'll see the Anyflix icon in your Chrome toolbar
+   - Reload any already-open target pages
+
+## Verifying the rules
+
+After reloading the unpacked extension, use the browser Network panel on a target page. Matching declarative requests should be reported as blocked, while the Netflix operation-specific requests are stopped before the native `fetch` or `XMLHttpRequest` call is made. Normal GraphQL operations are intentionally left untouched.
 
 ## Disclaimer
 

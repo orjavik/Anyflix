@@ -1,32 +1,62 @@
 [
-	{
-		"id": 1,
-		"priority": 1,
-		"action": {
-			"type": "block"
-		},
-		"condition": {
-			"urlFilter": "||cmp.vg.no/wrapper/v2/"
-		}
-	},
-	{
-		"id": 2,
-		"priority": 1,
-		"action": {
-			"type": "block"
-		},
-		"condition": {
-			"urlFilter": "||cmp.vg.no/unified/wrapperMessagingWithoutDetection.js"
-		}
-	},
-	{
-		"id": 3,
-		"priority": 1,
-		"action": {
-			"type": "block"
-		},
-		"condition": {
-			"urlFilter": "||cmp.e24.no/unified/wrapperMessagingWithoutDetection.js"
-		}
-	}
+  {
+    "id": 1001,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||cmp.vg.no/wrapper/v2/",
+      "initiatorDomains": ["vg.no"],
+      "resourceTypes": ["script"]
+    }
+  },
+  {
+    "id": 1002,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||cmp.vg.no/unified/wrapperMessagingWithoutDetection.js",
+      "initiatorDomains": ["vg.no"],
+      "resourceTypes": ["script"]
+    }
+  },
+  {
+    "id": 1003,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||cmp.e24.no/unified/wrapperMessagingWithoutDetection.js",
+      "initiatorDomains": ["e24.no"],
+      "resourceTypes": ["script"]
+    }
+  },
+  {
+    "id": 2001,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||netflix.com/api/ftl/probe",
+      "initiatorDomains": ["netflix.com"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 2002,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "regexFilter": "^https?://w-sgprod-zulu\\.api-canaldigital\\.com/v1/stream/session/[^/?#]+/streaming(?:[/?#].*)?$",
+      "initiatorDomains": ["allente.no"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
 ]

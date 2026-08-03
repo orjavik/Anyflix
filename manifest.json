@@ -1,28 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Anyflix",
-  "version": "3.1.0",
-  "description": "Bypass streaming network checks",
+  "version": "4.0.0",
+  "description": "Network-only filtering for selected verification and consent requests",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
   "permissions": [
-    "declarativeNetRequest",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequest"
   ],
   "host_permissions": [
-    "*://*.netflix.com/*",
-    "*://web.prod.cloud.netflix.com/*",
-    "*://tv.allente.no/*",
-    "*://w-sgprod-zulu.api-canaldigital.com/*",
-    "*://cmp.vg.no/*",
-    "*://cmp.e24.no/*"
+    "*://*.netflix.com/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
   "declarative_net_request": {
     "rule_resources": [
       {
@@ -34,8 +25,8 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.netflix.com/*", "*://tv.allente.no/*", "*://w-sgprod-zulu.api-canaldigital.com/*"],
-      "js": ["injector.js"],
+      "matches": ["*://*.netflix.com/*"],
+      "js": ["request-blocker.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
