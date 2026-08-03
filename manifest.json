@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Anyflix",
-  "version": "4.0.0",
-  "description": "Network-only filtering for selected verification and consent requests",
+  "version": "4.0.1",
+  "description": "Bypass network-requests, stream anywhere and read your news in peace.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
