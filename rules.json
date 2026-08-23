@@ -36,6 +36,18 @@
     }
   },
   {
+    "id": 1004,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||cmp.minmote.no/unified/wrapperMessagingWithoutDetection.js",
+      "initiatorDomains": ["minmote.no"],
+      "resourceTypes": ["script"]
+    }
+  },
+  {
     "id": 2001,
     "priority": 1,
     "action": {
