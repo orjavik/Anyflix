@@ -48,6 +48,18 @@
     }
   },
   {
+    "id": 1005,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||cmp.aftenposten.no/unified/wrapperMessagingWithoutDetection.js",
+      "initiatorDomains": ["aftenposten.no"],
+      "resourceTypes": ["script"]
+    }
+  },
+  {
     "id": 2001,
     "priority": 1,
     "action": {
