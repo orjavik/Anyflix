@@ -2,38 +2,40 @@
 // It never reads or changes page elements, playback state, or response bodies.
 
 (() => {
-  'use strict';
+  "use strict";
 
-  const INSTALL_MARKER = Symbol.for('anyflix.networkRequestBlockerInstalled');
+  const INSTALL_MARKER = Symbol.for("anyflix.networkRequestBlockerInstalled");
 
   if (globalThis[INSTALL_MARKER]) return;
 
   Object.defineProperty(globalThis, INSTALL_MARKER, { value: true });
 
   const BLOCKED_OPERATIONS = new Set([
-    'CLCSInterstitialLolomo',
-    'CLCSInterstitialPlaybackAndPostPlayback',
-    'CLCSSendFeedback',
+    "CLCSInterstitialLolomo",
+    "CLCSInterstitialPlaybackAndPostPlayback",
+    "CLCSSendFeedback",
   ]);
-  const OPERATION_HEADER = 'x-netflix.context.operation-name';
+  const OPERATION_HEADER = "x-netflix.context.operation-name";
 
   const isBlockedOperation = (operationName) =>
-    typeof operationName === 'string' && BLOCKED_OPERATIONS.has(operationName);
+    typeof operationName === "string" && BLOCKED_OPERATIONS.has(operationName);
 
   const getHeader = (headers, headerName) => {
     if (!headers) return undefined;
 
     try {
-      if (typeof headers.get === 'function') {
+      if (typeof headers.get === "function") {
         return headers.get(headerName) ?? undefined;
       }
 
       if (Array.isArray(headers)) {
-        const entry = headers.find(([name]) => name.toLowerCase() === headerName);
+        const entry = headers.find(
+          ([name]) => name.toLowerCase() === headerName,
+        );
         return entry?.[1];
       }
 
-      if (typeof headers === 'object') {
+      if (typeof headers === "object") {
         const key = Object.keys(headers).find(
           (name) => name.toLowerCase() === headerName,
         );
@@ -47,7 +49,7 @@
   };
 
   const getOperationFromBody = (body) => {
-    if (typeof body === 'string') {
+    if (typeof body === "string") {
       try {
         return JSON.parse(body)?.operationName;
       } catch (_) {
@@ -56,13 +58,16 @@
       }
     }
 
-    if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
-      return body.get('operationName') ?? undefined;
+    if (
+      typeof URLSearchParams !== "undefined" &&
+      body instanceof URLSearchParams
+    ) {
+      return body.get("operationName") ?? undefined;
     }
 
-    if (typeof FormData !== 'undefined' && body instanceof FormData) {
-      const operationName = body.get('operationName');
-      return typeof operationName === 'string' ? operationName : undefined;
+    if (typeof FormData !== "undefined" && body instanceof FormData) {
+      const operationName = body.get("operationName");
+      return typeof operationName === "string" ? operationName : undefined;
     }
 
     return undefined;
@@ -83,22 +88,24 @@
     try {
       const url = new URL(requestUrl, globalThis.location.href);
       const isNetflixHost =
-        url.hostname === 'netflix.com' || url.hostname.endsWith('.netflix.com');
+        url.hostname === "netflix.com" || url.hostname.endsWith(".netflix.com");
 
-      return isNetflixHost && url.pathname.toLowerCase().includes('graphql');
+      return isNetflixHost && url.pathname.toLowerCase().includes("graphql");
     } catch (_) {
       return false;
     }
   };
 
   const getRequestUrl = (resource) => {
-    if (typeof resource === 'string') return resource;
+    if (typeof resource === "string") return resource;
     if (resource instanceof URL) return resource.href;
     return resource?.url;
   };
 
   const requestHasOwnBody = (init) =>
-    init && Object.prototype.hasOwnProperty.call(init, 'body') && init.body !== undefined;
+    init &&
+    Object.prototype.hasOwnProperty.call(init, "body") &&
+    init.body !== undefined;
 
   const getFetchBlockedOperation = (resource, init) => {
     if (!isNetflixGraphqlRequest(getRequestUrl(resource))) return null;
@@ -128,9 +135,9 @@
   };
 
   const blockedRequestError = () => {
-    const message = 'Request blocked by Anyflix.';
-    return typeof DOMException === 'function'
-      ? new DOMException(message, 'NetworkError')
+    const message = "Request blocked by Anyflix.";
+    return typeof DOMException === "function"
+      ? new DOMException(message, "NetworkError")
       : new TypeError(message);
   };
 
@@ -146,7 +153,7 @@
     return blockedOperation.then((operationName) => {
       if (!operationName) return originalFetch.apply(this, arguments);
 
-      console.info('Anyflix: Blocked Netflix request:', operationName);
+      console.info("Anyflix: Blocked Netflix request:", operationName);
       throw blockedRequestError();
     });
   };
@@ -165,7 +172,10 @@
     return originalXhrOpen.call(this, method, url, ...rest);
   };
 
-  XMLHttpRequest.prototype.setRequestHeader = function anyflixSetRequestHeader(name, value) {
+  XMLHttpRequest.prototype.setRequestHeader = function anyflixSetRequestHeader(
+    name,
+    value,
+  ) {
     const metadata = requestMetadata.get(this);
 
     if (metadata) {
@@ -186,12 +196,12 @@
     const operationName = getBlockedOperation(metadata?.headers, body);
 
     if (metadata && isNetflixGraphqlRequest(metadata.url) && operationName) {
-      console.info('Anyflix: Blocked Netflix request:', operationName);
+      console.info("Anyflix: Blocked Netflix request:", operationName);
       this.abort();
 
       queueMicrotask(() => {
-        this.dispatchEvent(new Event('error'));
-        this.dispatchEvent(new Event('loadend'));
+        this.dispatchEvent(new Event("error"));
+        this.dispatchEvent(new Event("loadend"));
       });
       return undefined;
     }

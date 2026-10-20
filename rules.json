@@ -82,5 +82,45 @@
       "initiatorDomains": ["allente.no"],
       "resourceTypes": ["xmlhttprequest"]
     }
+  },
+  {
+    "id": 2003,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||stream-od.akamaized.net/yos/"
+    }
+  },
+  {
+    "id": 2004,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "regexFilter": "^https?://(?:[^/?#]+\\.)?playbackquality\\.tv2\\.no/ad(?:Quartile|Resume|Manifest)(?:[/?#].*)?$"
+    }
+  },
+  {
+    "id": 2005,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "regexFilter": "^https?://(?:d3fe5h2m1cud5p\\.cloudfront\\.net|progressive-tv2-no\\.akamaized\\.net)/[^/?#]+/[^/?#]+/[^/?#]+\\.mp4(?:[?#].*)?$"
+    }
+  },
+  {
+    "id": 2006,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||playbackquality.tv2.no/start"
+    }
   }
 ]
