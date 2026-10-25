@@ -1,37 +1,37 @@
 {
   "manifest_version": 3,
   "name": "Anyflix",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Bypass network-requests, stream anywhere and read your news in peace.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["declarativeNetRequest"],
+  "permissions": ["declarativeNetRequest", "scripting", "storage"],
   "host_permissions": [
     "*://*.netflix.com/*",
     "*://*.tv2.no/*",
     "*://*.akamaized.net/*",
     "*://d3fe5h2m1cud5p.cloudfront.net/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "declarative_net_request": {
     "rule_resources": [
       {
         "id": "ruleset_1",
         "enabled": true,
         "path": "rules.json"
+      },
+      {
+        "id": "tv2_session",
+        "enabled": false,
+        "path": "rules-tv2-session.json"
       }
     ]
   },
-  "content_scripts": [
-    {
-      "matches": ["*://*.netflix.com/*"],
-      "js": ["request-blocker.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    }
-  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

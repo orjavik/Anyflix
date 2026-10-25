@@ -1,0 +1,14 @@
+[
+  {
+    "id": 2007,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||api.play.tv2.no/rest/user/session/verify",
+      "initiatorDomains": ["tv2.no"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]
